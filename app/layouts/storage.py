@@ -15,6 +15,8 @@ class StorageBackend:
 
     def upload_file(self, source: Path, key: str, content_type: str | None = None) -> str: ...
 
+    def download_file(self, key: str, destination: Path) -> None: ...
+
     def url_for(self, key: str) -> str: ...
 
 
@@ -37,6 +39,11 @@ class LocalStorageBackend(StorageBackend):
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, destination)
         return self.url_for(key)
+
+    def download_file(self, key: str, destination: Path) -> None:
+        source = self.root / key
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
 
     def url_for(self, key: str) -> str:
         if self.public_base:
@@ -66,6 +73,10 @@ class S3StorageBackend(StorageBackend):
         else:
             self.client.upload_file(str(source), self.bucket, key)
         return self.url_for(key)
+
+    def download_file(self, key: str, destination: Path) -> None:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        self.client.download_file(self.bucket, key, str(destination))
 
     def url_for(self, key: str) -> str:
         if self.public_base:

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import contextlib
-from dataclasses import dataclass
 import json
 import re
+import shutil
 import tempfile
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
-from uuid import uuid4
 
 from fastapi import UploadFile
 from sqlalchemy import func, or_, select
@@ -18,6 +19,7 @@ from app.layouts.parser.dxf import extract_plot_positions, load_layout_block, re
 from app.layouts.parser.excel import parse_excel_metadata
 from app.layouts.storage import get_storage_backend
 from app.models.layout import Layout
+from app.models.layout_upload_job import LayoutUploadJob
 from app.models.plot import Plot
 
 
@@ -33,10 +35,9 @@ EXCEL_CONTENT_TYPES = {
 
 
 @dataclass(slots=True)
-class LayoutUploadJob:
+class PreparedLayoutUpload:
     layout: Layout
-    dxf_path: Path
-    excel_path: Path
+    job_record: LayoutUploadJob
 
 
 def _slugify(value: str) -> str:
@@ -99,7 +100,7 @@ def prepare_layout_upload(
     name: str | None,
     dxf_file: UploadFile | None,
     excel_file: UploadFile | None,
-) -> LayoutUploadJob:
+) -> PreparedLayoutUpload:
     if name is None or not name.strip():
         raise APIError("INVALID_UPLOAD", "Layout name is required", status_code=400)
     _validate_upload_file(dxf_file, DXF_EXTENSIONS, DXF_CONTENT_TYPES)
@@ -120,38 +121,78 @@ def prepare_layout_upload(
 
     layout = Layout(name=name.strip(), slug=slug, status="processing", plot_count=0)
     db.add(layout)
+    db.flush()
+    job: LayoutUploadJob | None = None
+
+    try:
+        storage = get_storage_backend()
+        source_dxf_key = f"layouts/{layout.id}/source/layout.dxf"
+        source_excel_key = f"layouts/{layout.id}/source/layout.xlsx"
+        source_dxf_url = storage.upload_bytes(source_dxf_key, dxf_bytes, "application/dxf")
+        source_excel_url = storage.upload_bytes(
+            source_excel_key,
+            excel_bytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+        job = LayoutUploadJob(
+            layout_id=layout.id,
+            status="pending",
+            source_dxf_key=source_dxf_key,
+            source_excel_key=source_excel_key,
+        )
+        db.add(job)
+        layout.dxf_file_url = source_dxf_url
+        layout.excel_file_url = source_excel_url
+        db.commit()
+        db.refresh(layout)
+        db.refresh(job)
+    except Exception:
+        db.rollback()
+        raise
+
+    assert job is not None
+    return PreparedLayoutUpload(layout=layout, job_record=job)
+
+
+def _set_layout_job_failed(db: Session, job: LayoutUploadJob, layout: Layout | None, message: str) -> None:
+    job.status = "failed"
+    job.error_message = message
+    job.finished_at = datetime.now(timezone.utc)
+    if layout is not None:
+        layout.status = "failed"
     db.commit()
-    db.refresh(layout)
-
-    temp_dir = Path(tempfile.mkdtemp(prefix="layout-upload-"))
-    dxf_path = temp_dir / f"{uuid4()}.dxf"
-    excel_path = temp_dir / f"{uuid4()}.xlsx"
-    dxf_path.write_bytes(dxf_bytes)
-    excel_path.write_bytes(excel_bytes)
-
-    return LayoutUploadJob(layout=layout, dxf_path=dxf_path, excel_path=excel_path)
 
 
-def process_layout_upload(layout_id: str, dxf_path: Path, excel_path: Path) -> None:
+def process_layout_upload(job_id: str) -> None:
     session_local = get_session_local()
     db = session_local()
     storage = get_storage_backend()
     preview_path: Path | None = None
+    temp_dir: Path | None = None
 
     try:
-        layout = db.get(Layout, layout_id)
-        if layout is None:
+        job = db.get(LayoutUploadJob, job_id)
+        if job is None or job.status != "pending":
             return
 
-        source_dxf_url = storage.upload_file(dxf_path, f"layouts/{layout_id}/source/layout.dxf", "application/dxf")
-        source_excel_url = storage.upload_file(
-            excel_path,
-            f"layouts/{layout_id}/source/layout.xlsx",
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-        layout.dxf_file_url = source_dxf_url
-        layout.excel_file_url = source_excel_url
+        layout = db.get(Layout, job.layout_id)
+        if layout is None:
+            job.status = "failed"
+            job.error_message = "Layout does not exist"
+            job.finished_at = datetime.now(timezone.utc)
+            db.commit()
+            return
+
+        job.status = "running"
+        job.started_at = datetime.now(timezone.utc)
         db.commit()
+
+        temp_dir = Path(tempfile.mkdtemp(prefix="layout-upload-"))
+        dxf_path = temp_dir / "layout.dxf"
+        excel_path = temp_dir / "layout.xlsx"
+        storage.download_file(job.source_dxf_key, dxf_path)
+        storage.download_file(job.source_excel_key, excel_path)
 
         block = load_layout_block(dxf_path)
         plot_positions = extract_plot_positions(block)
@@ -166,13 +207,11 @@ def process_layout_upload(layout_id: str, dxf_path: Path, excel_path: Path) -> N
         preview_path = dxf_path.parent / "preview.png"
         hotspots = render_preview_and_hotspots(block, plot_positions, preview_path)
 
-        preview_url = storage.upload_file(preview_path, f"layouts/{layout_id}/preview.png", "image/png")
+        preview_key = f"layouts/{layout.id}/preview.png"
+        hotspots_key = f"layouts/{layout.id}/hotspots.json"
+        preview_url = storage.upload_file(preview_path, preview_key, "image/png")
         hotspots_bytes = json.dumps(hotspots, ensure_ascii=False, indent=2).encode("utf-8")
-        hotspots_url = storage.upload_bytes(
-            f"layouts/{layout_id}/hotspots.json",
-            hotspots_bytes,
-            "application/json",
-        )
+        hotspots_url = storage.upload_bytes(hotspots_key, hotspots_bytes, "application/json")
 
         for plot_no in sorted(plot_positions, key=lambda value: (len(value), value)):
             metadata = plot_metadata[plot_no]
@@ -196,24 +235,22 @@ def process_layout_upload(layout_id: str, dxf_path: Path, excel_path: Path) -> N
         layout.hotspots_url = hotspots_url
         layout.plot_count = len(plot_positions)
         layout.status = "published"
+        job.status = "succeeded"
+        job.error_message = None
+        job.finished_at = datetime.now(timezone.utc)
         db.commit()
-    except Exception:
+    except Exception as exc:
         db.rollback()
-        layout = db.get(Layout, layout_id)
-        if layout is not None:
-            layout.status = "failed"
-            db.commit()
+        job = db.get(LayoutUploadJob, job_id)
+        layout = db.get(Layout, job.layout_id) if job is not None else None
+        if job is not None:
+            _set_layout_job_failed(db, job, layout, str(exc))
         raise
     finally:
         db.close()
-        for path in (dxf_path, excel_path, preview_path):
+        if temp_dir is not None:
             with contextlib.suppress(FileNotFoundError):
-                if path is not None:
-                    path.unlink()
-        with contextlib.suppress(OSError):
-            dxf_path.parent.rmdir()
-        with contextlib.suppress(OSError):
-            dxf_path.parent.parent.rmdir()
+                shutil.rmtree(temp_dir)
 
 
 def _layout_share_url(layout: Layout) -> str:

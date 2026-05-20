@@ -9,7 +9,7 @@
 - FastAPI app
 - PostgreSQL database
 - S3-compatible object storage + CDN
-- Background task worker (FastAPI BackgroundTasks or Celery)
+- Background task worker (`scripts/process_layout_upload_jobs.py`, FastAPI BackgroundTasks, or Celery)
 - Environment variables for secrets
 
 ---
@@ -39,5 +39,6 @@ SEED_ADMIN_PASSWORD    ← used once for initial admin seed
 - Set CORS for frontend domain
 - Enable HTTPS
 - Confirm health endpoint responds
+- Run the layout upload worker
 - Test DXF + Excel upload end to end
 - Confirm preview PNG and hotspot JSON appear on CDN

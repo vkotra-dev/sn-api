@@ -107,6 +107,9 @@ def test_upload_layout_publishes_and_serves_public_layout(tmp_path: Path, test_a
 
     layout_id = upload["data"]["layoutId"]
     slug = upload["data"]["slug"]
+    storage_root = tmp_path / "storage"
+    assert (storage_root / f"layouts/{layout_id}/source/layout.dxf").exists()
+    assert (storage_root / f"layouts/{layout_id}/source/layout.xlsx").exists()
 
     admin_detail = client.get(f"/api/admin/layouts/{layout_id}")
     assert admin_detail.status_code == 200

@@ -30,7 +30,7 @@ def create_layout(
     _current_admin=Depends(get_current_admin_user),
 ) -> dict[str, object]:
     job = prepare_layout_upload(db, name=name, dxf_file=dxf_file, excel_file=excel_file)
-    background_tasks.add_task(process_layout_upload, job.layout.id, job.dxf_path, job.excel_path)
+    background_tasks.add_task(process_layout_upload, job.job_record.id)
     return success_response(serialize_layout_upload_response(job.layout))
 
 
