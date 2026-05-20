@@ -16,7 +16,10 @@ class Settings(BaseSettings):
     access_token_exp_minutes: int = 24 * 60
     s3_bucket: str = ""
     s3_region: str = ""
+    storage_access_key: str = ""
+    storage_secret_key: str = ""
     cdn_base_url: str = ""
+    storage_root: str = ".storage"
 
 
 @lru_cache(maxsize=1)

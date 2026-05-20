@@ -6,6 +6,7 @@ from app.auth.router import router as auth_router
 from app.core.errors import APIError
 from app.common.responses import success_response
 from app.database.session import get_engine
+from app.layouts.router import public_router as public_layouts_router
 from app.layouts.router import router as layouts_router
 from app.plots.router import router as plots_router
 
@@ -23,5 +24,6 @@ async def health() -> dict[str, object]:
     return success_response({"status": "ok", "database": "ok"})
 
 api_router.include_router(auth_router, prefix="/auth", tags=["auth"])
-api_router.include_router(layouts_router, prefix="/admin/layouts", tags=["layouts"])
+api_router.include_router(layouts_router, tags=["layouts"])
+api_router.include_router(public_layouts_router, tags=["layouts"])
 api_router.include_router(plots_router, prefix="/admin/layouts", tags=["plots"])
