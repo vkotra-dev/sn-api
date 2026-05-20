@@ -79,8 +79,7 @@ def _seed_layout(SessionLocal):
 
 
 def test_get_plot_admin_detail(plot_db):
-    SessionLocal = plot_db
-    _seed_layout(SessionLocal)
+    _seed_layout(plot_db)
 
     client = TestClient(app)
     response = client.get("/api/admin/layouts/layout-1/plots/28")
@@ -103,8 +102,7 @@ def test_get_plot_admin_detail(plot_db):
 
 
 def test_patch_plot_status_validation(plot_db):
-    SessionLocal = plot_db
-    _seed_layout(SessionLocal)
+    _seed_layout(plot_db)
 
     client = TestClient(app)
 

@@ -212,6 +212,8 @@ def process_layout_upload(layout_id: str, dxf_path: Path, excel_path: Path) -> N
                     path.unlink()
         with contextlib.suppress(OSError):
             dxf_path.parent.rmdir()
+        with contextlib.suppress(OSError):
+            dxf_path.parent.parent.rmdir()
 
 
 def _layout_share_url(layout: Layout) -> str:

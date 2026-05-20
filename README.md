@@ -5,6 +5,7 @@ FastAPI backend for layout uploads, public layout viewing, and plot management.
 ## Environment
 
 Copy `.env.example` to `.env` and set `DATABASE_URL` to your PostgreSQL connection string.
+For local upload testing, generated assets are served from `/storage` using `storage_root` in `.env`.
 
 ## Run
 
