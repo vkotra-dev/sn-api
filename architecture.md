@@ -204,7 +204,7 @@ Upload is asynchronous. After files are received:
 5. Creates plot records
 6. Updates layout `status: published` (or `failed` on error)
 
-Admin UI polls for status or receives a live update.
+Admin UI polls for status until the layout is published or failed.
 
 ---
 

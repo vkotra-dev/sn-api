@@ -180,3 +180,36 @@ CREATE INDEX idx_admin_users_email   ON admin_users(email);
 | `svg_points JSONB` | Renamed to `hotspot` — stores `{x,y,r}`, not polygon points. |
 | `metadata JSONB` | Replaced by explicit columns: `owner`, `facing`, `dim_ft`, `extra`. |
 | `original_file_url` | Split into `dxf_file_url` and `excel_file_url`. |
+
+---
+
+# layout_upload_jobs
+
+```sql
+CREATE TABLE layout_upload_jobs (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    layout_id           UUID UNIQUE NOT NULL REFERENCES layouts(id) ON DELETE CASCADE,
+    status              TEXT NOT NULL DEFAULT 'pending',
+                        -- pending | running | succeeded | failed
+    source_dxf_key      TEXT NOT NULL,
+    source_excel_key    TEXT NOT NULL,
+    error_message       TEXT,
+    started_at          TIMESTAMP,
+    finished_at         TIMESTAMP,
+    created_at          TIMESTAMP DEFAULT NOW(),
+    updated_at          TIMESTAMP DEFAULT NOW()
+);
+```
+
+### Notes
+
+- Each layout has exactly one upload job record.
+- The job stores object-storage keys for the original source files so a worker can re-download them later.
+- `status` tracks the job lifecycle separate from the layout lifecycle.
+
+### Indexes
+
+```sql
+CREATE INDEX idx_layout_upload_jobs_layout_id ON layout_upload_jobs(layout_id);
+CREATE INDEX idx_layout_upload_jobs_status     ON layout_upload_jobs(status);
+```

@@ -24,8 +24,9 @@ Admin users are not created via API in Phase 1. They are seeded directly via a m
 
 ```python
 # scripts/seed_admin.py
+import os
 import bcrypt
-from app.database import get_db
+from app.database.session import get_db
 from app.models import AdminUser
 
 def seed():

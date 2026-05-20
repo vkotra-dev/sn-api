@@ -39,7 +39,7 @@ dxf_file: File       — .dxf layout file
 excel_file: File     — .xlsx plot data file
 ```
 
-The upload is asynchronous. The API accepts the files, validates them, creates the layout record with `status: processing`, and triggers background parsing.
+The upload is asynchronous. The API accepts the files, validates them, creates the layout record with `status: processing`, stores the source files, and triggers background parsing.
 
 Response (immediate):
 
@@ -55,7 +55,7 @@ Response (immediate):
 }
 ```
 
-The admin polls `GET /api/admin/layouts/{layoutId}` or receives a webhook/websocket update when status changes to `published` or `failed`.
+The admin polls `GET /api/admin/layouts/{layoutId}` until status changes to `published` or `failed`.
 
 ---
 

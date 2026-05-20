@@ -202,7 +202,7 @@ Response:
 }
 ```
 
-Fields never returned publicly: `owner`, `extra`, `id`, `layout_id`.
+Fields never returned publicly: `owner`, `extra`.
 
 ---
 
