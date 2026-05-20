@@ -1,0 +1,42 @@
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Python bytecode and packaging artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+site/
+
+# Virtual environments
+.venv/
+venv/
+env/
+.python-version
+
+# Test, lint, and coverage outputs
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+
+# Local databases and SQLite artifacts
+backend_api.db
+*.db
+*.sqlite
+*.sqlite3
+
+# OS and editor files
+.DS_Store
+.idea/
+.vscode/
+
+# Misc
+*.log
