@@ -36,8 +36,9 @@ def load_layout_block(dxf_path: Path):
     return block
 
 
-def _is_digit_text(entity: Text) -> bool:
-    return entity.dxf.text is not None and entity.dxf.text.strip().isdigit()
+def _is_plot_text(entity: Text) -> bool:
+    text = getattr(entity.dxf, "text", None)
+    return text is not None and str(text).strip() != ""
 
 
 def extract_plot_positions(block) -> dict[str, PlotPosition]:
@@ -46,7 +47,7 @@ def extract_plot_positions(block) -> dict[str, PlotPosition]:
         for entity in block
         if entity.dxftype() == "TEXT"
         and getattr(entity.dxf, "layer", "") == PLOT_LAYER
-        and _is_digit_text(entity)
+        and _is_plot_text(entity)
     ]
     if not texts:
         raise ValueError("DXF block does not contain Plot_No TEXT entities")

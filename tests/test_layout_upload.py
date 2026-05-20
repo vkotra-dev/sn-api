@@ -19,7 +19,7 @@ from app.layouts.storage import LocalStorageBackend
 from app.main import app
 
 
-def _build_sample_dxf(path: Path) -> None:
+def _build_sample_dxf(path: Path, plots: list[tuple[str, float]]) -> None:
     doc = ezdxf.new("R2010")
     block = doc.blocks.new(name="LAYOUT_BLOCK")
 
@@ -28,7 +28,7 @@ def _build_sample_dxf(path: Path) -> None:
     block.add_line((40, 20), (0, 20), dxfattribs={"layer": "boundry"})
     block.add_line((0, 20), (0, 0), dxfattribs={"layer": "boundry"})
 
-    for plot_no, x in (("28", 10), ("29", 30)):
+    for plot_no, x in plots:
         text = block.add_text(plot_no, dxfattribs={"layer": "Plot_No", "height": 2.0})
         text.dxf.insert = (x, 10)
         block.add_circle((x, 10), radius=1.5, dxfattribs={"layer": "Plot_No"})
@@ -37,12 +37,12 @@ def _build_sample_dxf(path: Path) -> None:
     doc.saveas(path)
 
 
-def _build_sample_excel(path: Path) -> None:
+def _build_sample_excel(path: Path, plots: list[tuple[str, str, str, float, float, str]]) -> None:
     workbook = Workbook()
     sheet = workbook.active
     sheet.append(["Plot no", "Owner", "Dim ft", "Size ft", "Size yards", "Facing"])
-    sheet.append([28, "Mr. A", "33*50", 1650, 183.33, "East"])
-    sheet.append([29, "Mr. B", "40*50", 2000, 222.22, "West"])
+    for plot_no, owner, dim_ft, size_ft, size_yards, facing in plots:
+        sheet.append([plot_no, owner, dim_ft, size_ft, size_yards, facing])
     workbook.save(path)
 
 
@@ -75,8 +75,8 @@ def test_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 def test_upload_layout_publishes_and_serves_public_layout(tmp_path: Path, test_app: None) -> None:
     dxf_path = tmp_path / "layout.dxf"
     excel_path = tmp_path / "layout.xlsx"
-    _build_sample_dxf(dxf_path)
-    _build_sample_excel(excel_path)
+    _build_sample_dxf(dxf_path, [("28", 10), ("29", 30)])
+    _build_sample_excel(excel_path, [("28", "Mr. A", "33*50", 1650, 183.33, "East"), ("29", "Mr. B", "40*50", 2000, 222.22, "West")])
 
     client = TestClient(app)
     with dxf_path.open("rb") as dxf_file, excel_path.open("rb") as excel_file:
@@ -126,6 +126,7 @@ def test_upload_layout_publishes_and_serves_public_layout(tmp_path: Path, test_a
     public_response = client.get(f"/api/public/layouts/{slug}")
     assert public_response.status_code == 200
     public_layout = public_response.json()["data"]
+    assert "id" not in public_layout
     assert public_layout["slug"] == "suryapet-phase-1"
     assert len(public_layout["plots"]) == 2
     assert public_layout["plots"][0]["plotNo"] == "28"
@@ -133,9 +134,42 @@ def test_upload_layout_publishes_and_serves_public_layout(tmp_path: Path, test_a
     assert "extra" not in public_layout["plots"][0]
 
 
+def test_upload_layout_supports_alphanumeric_plot_numbers(tmp_path: Path, test_app: None) -> None:
+    dxf_path = tmp_path / "layout-alpha.dxf"
+    excel_path = tmp_path / "layout-alpha.xlsx"
+    _build_sample_dxf(dxf_path, [("9B", 10), ("28A", 30)])
+    _build_sample_excel(
+        excel_path,
+        [("9B", "Mr. A", "33*50", 1650, 183.33, "East"), ("28A", "Mr. B", "40*50", 2000, 222.22, "West")],
+    )
+
+    client = TestClient(app)
+    with dxf_path.open("rb") as dxf_file, excel_path.open("rb") as excel_file:
+        response = client.post(
+            "/api/admin/layouts",
+            data={"name": "Alpha Layout"},
+            files={
+                "dxf_file": ("layout-alpha.dxf", dxf_file, "application/dxf"),
+                "excel_file": (
+                    "layout-alpha.xlsx",
+                    excel_file,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                ),
+            },
+        )
+
+    assert response.status_code == 200
+    layout_id = response.json()["data"]["layoutId"]
+    public_response = client.get(f"/api/public/layouts/{response.json()['data']['slug']}")
+    assert public_response.status_code == 200
+    public_plots = public_response.json()["data"]["plots"]
+    assert [plot["plotNo"] for plot in public_plots] == ["9B", "28A"]
+    assert layout_id
+
+
 def test_upload_layout_rejects_missing_excel(tmp_path: Path, test_app: None) -> None:
     dxf_path = tmp_path / "layout.dxf"
-    _build_sample_dxf(dxf_path)
+    _build_sample_dxf(dxf_path, [("28", 10), ("29", 30)])
 
     client = TestClient(app)
     with dxf_path.open("rb") as dxf_file:
@@ -147,3 +181,43 @@ def test_upload_layout_rejects_missing_excel(tmp_path: Path, test_app: None) -> 
 
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "INVALID_UPLOAD"
+
+
+def test_upload_layout_rejects_duplicate_name(tmp_path: Path, test_app: None) -> None:
+    dxf_path = tmp_path / "layout.dxf"
+    excel_path = tmp_path / "layout.xlsx"
+    _build_sample_dxf(dxf_path, [("28", 10), ("29", 30)])
+    _build_sample_excel(excel_path, [("28", "Mr. A", "33*50", 1650, 183.33, "East"), ("29", "Mr. B", "40*50", 2000, 222.22, "West")])
+
+    client = TestClient(app)
+    with dxf_path.open("rb") as dxf_file, excel_path.open("rb") as excel_file:
+        first = client.post(
+            "/api/admin/layouts",
+            data={"name": "Duplicate Layout"},
+            files={
+                "dxf_file": ("layout.dxf", dxf_file, "application/dxf"),
+                "excel_file": (
+                    "layout.xlsx",
+                    excel_file,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                ),
+            },
+        )
+    assert first.status_code == 200
+
+    with dxf_path.open("rb") as dxf_file, excel_path.open("rb") as excel_file:
+        second = client.post(
+            "/api/admin/layouts",
+            data={"name": "Duplicate Layout"},
+            files={
+                "dxf_file": ("layout.dxf", dxf_file, "application/dxf"),
+                "excel_file": (
+                    "layout.xlsx",
+                    excel_file,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                ),
+            },
+        )
+
+    assert second.status_code == 409
+    assert second.json()["error"]["code"] == "DUPLICATE_LAYOUT_NAME"

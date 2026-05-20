@@ -127,7 +127,6 @@ Response:
 {
   "success": true,
   "data": {
-    "id": "uuid",
     "name": "Suryapet Phase 1",
     "slug": "suryapet-phase-1",
     "previewUrl": "https://cdn.example.com/layouts/uuid/preview.png",

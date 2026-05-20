@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 import re
 import shutil
 import tempfile
@@ -11,7 +12,7 @@ from pathlib import Path
 
 from fastapi import UploadFile
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.errors import APIError
 from app.database.session import get_session_local
@@ -23,11 +24,13 @@ from app.models.layout_upload_job import LayoutUploadJob
 from app.models.plot import Plot
 
 
+logger = logging.getLogger(__name__)
+
 MAX_DXF_BYTES = 50 * 1024 * 1024
 MAX_EXCEL_BYTES = 10 * 1024 * 1024
 DXF_EXTENSIONS = {".dxf"}
 EXCEL_EXTENSIONS = {".xlsx"}
-DXF_CONTENT_TYPES = {"application/dxf", "application/x-dxf", "text/plain", "application/octet-stream"}
+DXF_CONTENT_TYPES = {"application/dxf", "application/x-dxf", "application/octet-stream"}
 EXCEL_CONTENT_TYPES = {
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "application/octet-stream",
@@ -47,6 +50,13 @@ def _slugify(value: str) -> str:
 
 def _build_share_url(slug: str) -> str:
     return f"/layouts/{slug}"
+
+
+def _plot_sort_key(value: str) -> tuple[int, str]:
+    match = re.match(r"^(\d+)(.*)$", value)
+    if match:
+        return int(match.group(1)), match.group(2).lower()
+    return (10**12, value.lower())
 
 
 def _normalize_filename(filename: str | None, expected_exts: set[str]) -> str:
@@ -213,7 +223,7 @@ def process_layout_upload(job_id: str) -> None:
         hotspots_bytes = json.dumps(hotspots, ensure_ascii=False, indent=2).encode("utf-8")
         hotspots_url = storage.upload_bytes(hotspots_key, hotspots_bytes, "application/json")
 
-        for plot_no in sorted(plot_positions, key=lambda value: (len(value), value)):
+        for plot_no in sorted(plot_positions, key=_plot_sort_key):
             metadata = plot_metadata[plot_no]
             db.add(
                 Plot(
@@ -245,7 +255,8 @@ def process_layout_upload(job_id: str) -> None:
         layout = db.get(Layout, job.layout_id) if job is not None else None
         if job is not None:
             _set_layout_job_failed(db, job, layout, str(exc))
-        raise
+        logger.exception("layout upload job %s failed", job_id)
+        return
     finally:
         db.close()
         if temp_dir is not None:
@@ -306,12 +317,14 @@ def serialize_public_plot(plot: Plot) -> dict[str, object]:
 
 def serialize_public_layout(layout: Layout) -> dict[str, object]:
     return {
-        "id": layout.id,
         "name": layout.name,
         "slug": layout.slug,
         "previewUrl": layout.preview_url,
         "hotspotsUrl": layout.hotspots_url,
-        "plots": [serialize_public_plot(plot) for plot in sorted(layout.plots, key=lambda plot: plot.plot_no)],
+        "plots": [
+            serialize_public_plot(plot)
+            for plot in sorted(layout.plots, key=lambda plot: _plot_sort_key(plot.plot_no))
+        ],
     }
 
 
@@ -325,5 +338,5 @@ def get_layout(db: Session, layout_id: str) -> Layout | None:
 
 
 def get_public_layout(db: Session, slug: str) -> Layout | None:
-    statement = select(Layout).where(Layout.slug == slug).limit(1)
+    statement = select(Layout).options(selectinload(Layout.plots)).where(Layout.slug == slug).limit(1)
     return db.execute(statement).scalar_one_or_none()

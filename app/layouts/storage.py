@@ -65,9 +65,6 @@ class S3StorageBackend(StorageBackend):
         return self.url_for(key)
 
     def upload_file(self, source: Path, key: str, content_type: str | None = None) -> str:
-        extra_args = {}
-        if content_type:
-            extra_args["ExtraArgs"] = {"ContentType": content_type}
         if content_type:
             self.client.upload_file(str(source), self.bucket, key, ExtraArgs={"ContentType": content_type})
         else:

@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,8 +14,8 @@ class Settings(BaseSettings):
     jwt_secret: str = Field(default="change-me")
     jwt_algorithm: str = "HS256"
     access_token_exp_minutes: int = 24 * 60
-    s3_bucket: str = ""
-    s3_region: str = ""
+    s3_bucket: str = Field(default="", validation_alias=AliasChoices("STORAGE_BUCKET", "S3_BUCKET"))
+    s3_region: str = Field(default="", validation_alias=AliasChoices("S3_REGION", "AWS_REGION"))
     storage_access_key: str = ""
     storage_secret_key: str = ""
     cdn_base_url: str = ""
