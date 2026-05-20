@@ -20,7 +20,7 @@ router = APIRouter(prefix="/admin/layouts")
 public_router = APIRouter(prefix="/public/layouts")
 
 
-@router.post("/")
+@router.post("")
 def create_layout(
     background_tasks: BackgroundTasks,
     name: str | None = Form(default=None),
@@ -34,7 +34,7 @@ def create_layout(
     return success_response(serialize_layout_upload_response(job.layout))
 
 
-@router.get("/")
+@router.get("")
 def read_layouts(
     db: Session = Depends(get_db),
     _current_admin=Depends(get_current_admin_user),

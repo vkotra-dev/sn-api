@@ -26,4 +26,4 @@ async def health() -> dict[str, object]:
 api_router.include_router(auth_router, prefix="/auth", tags=["auth"])
 api_router.include_router(layouts_router, tags=["layouts"])
 api_router.include_router(public_layouts_router, tags=["layouts"])
-api_router.include_router(plots_router, prefix="/admin/layouts", tags=["plots"])
+api_router.include_router(plots_router, tags=["plots"])
