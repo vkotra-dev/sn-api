@@ -11,12 +11,6 @@ from app.models.plot import Plot
 
 
 ALLOWED_STATUSES = {"available", "reserved", "sold", "blocked"}
-STATUS_TRANSITIONS: dict[str, set[str]] = {
-    "available": {"reserved", "blocked"},
-    "reserved": {"available", "sold", "blocked"},
-    "sold": {"blocked"},
-    "blocked": {"available"},
-}
 
 
 def get_plot(db: Session, layout_id: str, plot_no: str) -> Plot | None:
@@ -52,26 +46,12 @@ def validate_status(status: str) -> str:
     return normalized
 
 
-def validate_status_transition(current: str, target: str) -> None:
-    if current == target:
-        return
-    allowed = STATUS_TRANSITIONS.get(current)
-    if allowed is None or target not in allowed:
-        raise APIError(
-            "INVALID_STATUS_TRANSITION",
-            f"Cannot transition from {current} to {target}",
-            status_code=400,
-        )
-
-
 def update_plot_status(db: Session, layout_id: str, plot_no: str, status: str) -> Plot:
     plot = get_plot(db, layout_id, plot_no)
     if plot is None:
         raise APIError("PLOT_NOT_FOUND", "Plot does not exist", status_code=404)
 
-    normalized = validate_status(status)
-    validate_status_transition(plot.status, normalized)
-    plot.status = normalized
+    plot.status = validate_status(status)
     db.commit()
     db.refresh(plot)
     return plot

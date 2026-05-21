@@ -215,7 +215,6 @@ def render_preview_and_hotspots(
             )
         elif entity.dxftype() == "TEXT" and layer == PLOT_LAYER:
             insert = entity.dxf.insert
-            # Convert DXF height (drawing units) to matplotlib points
             data_range = xmax - xmin
             height_pt = float(entity.dxf.height or 1) * fig_size * 72 / data_range
             ax.text(
@@ -223,9 +222,11 @@ def render_preview_and_hotspots(
                 float(insert.y),
                 entity.dxf.text,
                 fontsize=max(height_pt * 0.8, 4),
-                color=color,
+                color="#000000",
+                fontweight="bold",
                 ha="left",
                 va="baseline",
+                bbox={"boxstyle": "round,pad=0.1", "facecolor": "white", "edgecolor": "none", "alpha": 0.8},
             )
 
     fig.canvas.draw()
