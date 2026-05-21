@@ -32,6 +32,7 @@ backend_api.db
 *.db
 *.sqlite
 *.sqlite3
+.storage/
 
 # OS and editor files
 .DS_Store
