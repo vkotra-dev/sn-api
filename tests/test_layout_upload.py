@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -75,8 +76,8 @@ def test_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 def test_upload_layout_publishes_and_serves_public_layout(tmp_path: Path, test_app: None) -> None:
     dxf_path = tmp_path / "layout.dxf"
     excel_path = tmp_path / "layout.xlsx"
-    _build_sample_dxf(dxf_path, [("28", 10), ("29", 30)])
-    _build_sample_excel(excel_path, [("28", "Mr. A", "33*50", 1650, 183.33, "East"), ("29", "Mr. B", "40*50", 2000, 222.22, "West")])
+    _build_sample_dxf(dxf_path, [("28A", 10), ("29B", 30)])
+    _build_sample_excel(excel_path, [("28A", "Mr. A", "33*50", 1650, 183.33, "East"), ("29B", "Mr. B", "40*50", 2000, 222.22, "West")])
 
     client = TestClient(app)
     with dxf_path.open("rb") as dxf_file, excel_path.open("rb") as excel_file:
@@ -116,8 +117,8 @@ def test_upload_layout_publishes_and_serves_public_layout(tmp_path: Path, test_a
     admin_data = admin_detail.json()["data"]
     assert admin_data["status"] == "published"
     assert admin_data["plotCount"] == 2
-    assert admin_data["previewUrl"].endswith("preview.png")
-    assert admin_data["hotspotsUrl"].endswith("hotspots.json")
+    assert admin_data["previewUrl"] == f"/storage/layouts/{layout_id}/preview.png"
+    assert admin_data["hotspotsUrl"] == f"/storage/layouts/{layout_id}/hotspots.json"
 
     list_response = client.get("/api/admin/layouts")
     assert list_response.status_code == 200
@@ -128,19 +129,24 @@ def test_upload_layout_publishes_and_serves_public_layout(tmp_path: Path, test_a
     public_layout = public_response.json()["data"]
     assert "id" not in public_layout
     assert public_layout["slug"] == "suryapet-phase-1"
+    assert public_layout["previewUrl"] == f"/storage/layouts/{layout_id}/preview.png"
+    assert public_layout["hotspotsUrl"] == f"/storage/layouts/{layout_id}/hotspots.json"
     assert len(public_layout["plots"]) == 2
-    assert public_layout["plots"][0]["plotNo"] == "28"
+    assert public_layout["plots"][0]["plotNo"] == "28A"
     assert "owner" not in public_layout["plots"][0]
     assert "extra" not in public_layout["plots"][0]
 
 
-def test_upload_layout_supports_alphanumeric_plot_numbers(tmp_path: Path, test_app: None) -> None:
-    dxf_path = tmp_path / "layout-alpha.dxf"
-    excel_path = tmp_path / "layout-alpha.xlsx"
-    _build_sample_dxf(dxf_path, [("9B", 10), ("28A", 30)])
+def test_upload_layout_ignores_non_integer_plot_labels(tmp_path: Path, test_app: None) -> None:
+    dxf_path = tmp_path / "layout-mixed.dxf"
+    excel_path = tmp_path / "layout-mixed.xlsx"
+    _build_sample_dxf(
+        dxf_path,
+        [("28A", 10), ("10.0M BUILDING LINE", 15), ("29B", 30), ("revised club house - 24-5-2021", 35)],
+    )
     _build_sample_excel(
         excel_path,
-        [("9B", "Mr. A", "33*50", 1650, 183.33, "East"), ("28A", "Mr. B", "40*50", 2000, 222.22, "West")],
+        [("28A", "Mr. A", "33*50", 1650, 183.33, "East"), ("29B", "Mr. B", "40*50", 2000, 222.22, "West")],
     )
 
     client = TestClient(app)
@@ -163,13 +169,53 @@ def test_upload_layout_supports_alphanumeric_plot_numbers(tmp_path: Path, test_a
     public_response = client.get(f"/api/public/layouts/{response.json()['data']['slug']}")
     assert public_response.status_code == 200
     public_plots = public_response.json()["data"]["plots"]
-    assert [plot["plotNo"] for plot in public_plots] == ["9B", "28A"]
+    assert [plot["plotNo"] for plot in public_plots] == ["28A", "29B"]
     assert layout_id
+
+
+def test_upload_layout_real_sample_files_publish(tmp_path: Path, test_app: None) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    dxf_source = repo_root / "SURYAPET-DTCP-LAYOUT-2 - REVISED 24-5-21 club house.dxf"
+    excel_source = repo_root / "complete plots.xlsx"
+
+    dxf_path = tmp_path / dxf_source.name
+    excel_path = tmp_path / excel_source.name
+    shutil.copyfile(dxf_source, dxf_path)
+    shutil.copyfile(excel_source, excel_path)
+
+    client = TestClient(app)
+    with dxf_path.open("rb") as dxf_file, excel_path.open("rb") as excel_file:
+        response = client.post(
+            "/api/admin/layouts",
+            data={"name": "Real Sample Layout"},
+            files={
+                "dxf_file": (dxf_path.name, dxf_file, "application/dxf"),
+                "excel_file": (excel_path.name, excel_file, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+            },
+        )
+
+    assert response.status_code == 200
+    upload = response.json()["data"]
+    layout_id = upload["layoutId"]
+    slug = upload["slug"]
+
+    admin_detail = client.get(f"/api/admin/layouts/{layout_id}")
+    assert admin_detail.status_code == 200
+    admin_data = admin_detail.json()["data"]
+    assert admin_data["status"] == "published"
+    assert admin_data["plotCount"] == 941
+    assert admin_data["previewUrl"] == f"/storage/layouts/{layout_id}/preview.png"
+    assert admin_data["hotspotsUrl"] == f"/storage/layouts/{layout_id}/hotspots.json"
+
+    public_response = client.get(f"/api/public/layouts/{slug}")
+    assert public_response.status_code == 200
+    public_layout = public_response.json()["data"]
+    assert len(public_layout["plots"]) == 941
 
 
 def test_upload_layout_rejects_missing_excel(tmp_path: Path, test_app: None) -> None:
     dxf_path = tmp_path / "layout.dxf"
-    _build_sample_dxf(dxf_path, [("28", 10), ("29", 30)])
+    _build_sample_dxf(dxf_path, [("28A", 10), ("29B", 30)])
 
     client = TestClient(app)
     with dxf_path.open("rb") as dxf_file:
@@ -186,8 +232,8 @@ def test_upload_layout_rejects_missing_excel(tmp_path: Path, test_app: None) -> 
 def test_upload_layout_rejects_duplicate_name(tmp_path: Path, test_app: None) -> None:
     dxf_path = tmp_path / "layout.dxf"
     excel_path = tmp_path / "layout.xlsx"
-    _build_sample_dxf(dxf_path, [("28", 10), ("29", 30)])
-    _build_sample_excel(excel_path, [("28", "Mr. A", "33*50", 1650, 183.33, "East"), ("29", "Mr. B", "40*50", 2000, 222.22, "West")])
+    _build_sample_dxf(dxf_path, [("28A", 10), ("29B", 30)])
+    _build_sample_excel(excel_path, [("28A", "Mr. A", "33*50", 1650, 183.33, "East"), ("29B", "Mr. B", "40*50", 2000, 222.22, "West")])
 
     client = TestClient(app)
     with dxf_path.open("rb") as dxf_file, excel_path.open("rb") as excel_file:

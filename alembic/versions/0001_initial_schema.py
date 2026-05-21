@@ -64,7 +64,6 @@ def upgrade() -> None:
         ),
         sa.UniqueConstraint("slug"),
     )
-    op.create_index("idx_layouts_slug", "layouts", ["slug"], unique=False)
     op.create_index("idx_layouts_status", "layouts", ["status"], unique=False)
 
     op.create_table(
@@ -108,7 +107,6 @@ def downgrade() -> None:
     op.drop_table("plots")
 
     op.drop_index("idx_layouts_status", table_name="layouts")
-    op.drop_index("idx_layouts_slug", table_name="layouts")
     op.drop_table("layouts")
 
     op.drop_index("idx_admin_users_email", table_name="admin_users")

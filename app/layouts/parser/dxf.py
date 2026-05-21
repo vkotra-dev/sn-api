@@ -5,6 +5,8 @@ from math import cos, pi, sin
 from pathlib import Path
 from typing import Iterable
 
+import re
+
 import ezdxf
 from ezdxf.entities import Circle, LWPolyline, Line, Text
 import matplotlib
@@ -38,7 +40,10 @@ def load_layout_block(dxf_path: Path):
 
 def _is_plot_text(entity: Text) -> bool:
     text = getattr(entity.dxf, "text", None)
-    return text is not None and str(text).strip() != ""
+    if text is None:
+        return False
+    value = str(text).strip()
+    return bool(re.match(r"^[0-9]+(?:[A-Za-z]+)?$", value))
 
 
 def extract_plot_positions(block) -> dict[str, PlotPosition]:
@@ -50,7 +55,7 @@ def extract_plot_positions(block) -> dict[str, PlotPosition]:
         and _is_plot_text(entity)
     ]
     if not texts:
-        raise ValueError("DXF block does not contain Plot_No TEXT entities")
+        raise ValueError("DXF block does not contain any valid plot labels on Plot_No")
 
     circles = [
         entity
@@ -60,7 +65,13 @@ def extract_plot_positions(block) -> dict[str, PlotPosition]:
 
     plot_positions: dict[str, PlotPosition] = {}
     for text in texts:
-        plot_no = text.dxf.text.strip()
+        raw_plot_no = text.dxf.text.strip()
+        match = re.match(r"^([0-9]+)([A-Za-z]+)?$", raw_plot_no)
+        if not match:
+            continue
+        plot_no = str(int(match.group(1)))
+        if match.group(2):
+            plot_no = f"{plot_no}{match.group(2).upper()}"
         height = float(text.dxf.height or 0)
         char_width = height * 0.6
         insert = text.dxf.insert
@@ -202,13 +213,16 @@ def render_preview_and_hotspots(
                     linewidth=linewidth,
                 )
             )
-        elif entity.dxftype() == "TEXT":
+        elif entity.dxftype() == "TEXT" and layer == PLOT_LAYER:
             insert = entity.dxf.insert
+            # Convert DXF height (drawing units) to matplotlib points
+            data_range = xmax - xmin
+            height_pt = float(entity.dxf.height or 1) * fig_size * 72 / data_range
             ax.text(
                 float(insert.x),
                 float(insert.y),
                 entity.dxf.text,
-                fontsize=max(float(entity.dxf.height or 1) * 0.8, 1),
+                fontsize=max(height_pt * 0.8, 4),
                 color=color,
                 ha="left",
                 va="baseline",

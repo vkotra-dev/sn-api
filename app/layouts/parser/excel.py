@@ -29,20 +29,16 @@ def _normalize_header(value) -> str:
 def _normalize_plot_no(value) -> str:
     if value is None:
         raise ValueError("Plot no is missing")
-    if isinstance(value, float) and value.is_integer():
-        return str(int(value))
-    if isinstance(value, int):
-        return str(value)
     text = str(value).strip()
     if not text:
         raise ValueError("Plot no is missing")
-    try:
-        number = float(text)
-    except ValueError:
-        return text
-    if number.is_integer():
-        return str(int(number))
-    return text
+    match = re.match(r"^([0-9]+)([A-Za-z]+)?$", text)
+    if not match:
+        raise ValueError("Plot no must start with one or more digits")
+    plot_no = str(int(match.group(1)))
+    if match.group(2):
+        plot_no = f"{plot_no}{match.group(2).upper()}"
+    return plot_no
 
 
 def parse_dimension(dim_str: str | None) -> str | None:
@@ -124,4 +120,3 @@ def parse_excel_metadata(excel_path: Path) -> dict[str, PlotMetadata]:
         raise ValueError("Excel file does not contain any plot rows")
 
     return metadata
-

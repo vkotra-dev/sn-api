@@ -156,7 +156,6 @@ CREATE TABLE admin_users (
 
 ```sql
 -- layouts
-CREATE INDEX idx_layouts_slug        ON layouts(slug);
 CREATE INDEX idx_layouts_status      ON layouts(status);
 
 -- plots

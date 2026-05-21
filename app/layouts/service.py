@@ -210,8 +210,8 @@ def process_layout_upload(job_id: str) -> None:
 
         dxf_plot_nos = set(plot_positions)
         excel_plot_nos = set(plot_metadata)
-        if dxf_plot_nos != excel_plot_nos:
-            missing = sorted(dxf_plot_nos ^ excel_plot_nos)
+        missing = sorted(dxf_plot_nos - excel_plot_nos)
+        if missing:
             raise ValueError(f"DXF and Excel plot numbers do not match: {', '.join(missing)}")
 
         preview_path = dxf_path.parent / "preview.png"

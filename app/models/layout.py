@@ -12,7 +12,7 @@ class Layout(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     name: Mapped[str] = mapped_column(Text, nullable=False)
-    slug: Mapped[str] = mapped_column(Text, nullable=False, unique=True, index=True)
+    slug: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     dxf_file_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     excel_file_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     preview_url: Mapped[str | None] = mapped_column(Text, nullable=True)

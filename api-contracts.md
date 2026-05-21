@@ -162,8 +162,8 @@ Response:
     "slug": "suryapet-phase-1",
     "status": "published",
     "plotCount": 941,
-    "previewUrl": "https://cdn.example.com/layouts/uuid/preview.png",
-    "hotspotsUrl": "https://cdn.example.com/layouts/uuid/hotspots.json",
+    "previewUrl": "/storage/layouts/uuid/preview.png",
+    "hotspotsUrl": "/storage/layouts/uuid/hotspots.json",
     "shareUrl": "/layouts/suryapet-phase-1",
     "createdAt": "2026-05-20T10:00:00Z"
   }
@@ -184,8 +184,8 @@ Response:
   "data": {
     "name": "Suryapet Phase 1",
     "slug": "suryapet-phase-1",
-    "previewUrl": "https://cdn.example.com/layouts/uuid/preview.png",
-    "hotspotsUrl": "https://cdn.example.com/layouts/uuid/hotspots.json",
+    "previewUrl": "/storage/layouts/uuid/preview.png",
+    "hotspotsUrl": "/storage/layouts/uuid/hotspots.json",
     "plots": [
       {
         "plotNo": "28",
@@ -202,6 +202,25 @@ Response:
 ```
 
 Fields never returned publicly: `owner`, `extra`.
+
+### Storage URLs
+
+`previewUrl` and `hotspotsUrl` are not guaranteed to be absolute URLs.
+
+| Environment | Example value |
+|---|---|
+| Local / dev | `/storage/layouts/uuid/preview.png` |
+| Production with CDN base | `https://cdn.example.com/layouts/uuid/preview.png` |
+| S3 without CDN base | `s3://bucket/layouts/uuid/preview.png` |
+
+Consumer rule: resolve storage URLs against the API origin before use.
+
+```ts
+const resolvedUrl = new URL(storageUrl, apiOrigin).toString();
+```
+
+Use the API origin, not the frontend app origin.
+If the backend is configured without a CDN base in S3 mode, the value may be an `s3://` URI and should not be treated as directly fetchable by a browser.
 
 ---
 
